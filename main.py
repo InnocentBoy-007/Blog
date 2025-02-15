@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from typing import Optional
+from pydantic import BaseModel
+import uvicorn 
 
 # instantiate the FastAPI class
 app = FastAPI()
@@ -23,5 +25,18 @@ def show(id : int): # defining the type for the parameter
 @app.get("/blog/{id}/comments")
 def comments(id : int, limit=10):
     return limit
-    
 
+# Blog request body
+class Blog(BaseModel):
+    title: str
+    body: str
+    published: Optional[bool] = False
+
+# When we send request to the server we need to send it as a requesy body
+@app.post('/blog')
+def create_blog(blog: Blog):
+    return {'data': f'Blog is created successfully with title as {blog.title}'}
+
+# change ports
+if __name__ == '__main__':
+    uvicorn.run(app, host='127.0.0.1', port=9000)
