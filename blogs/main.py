@@ -9,5 +9,5 @@ models.Base.metadata.create_all(bind=engine)
     
 # Using a request body
 @app.post('/')
-def create(request: schemas.Blog, db: Sess):
+def create(request: schemas.Blog, db: Session):
     return request
