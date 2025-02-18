@@ -1,2 +1,2 @@
-__pycache__
-./blog-env
+node_modules
+.env
