@@ -1,5 +1,5 @@
 import express from 'express'
-import service from '../Service/Services.js';
+import service from '../Service/AuthServices.js';
 
 const route = express.Router();
 route.use("/signup", service.SignUp);

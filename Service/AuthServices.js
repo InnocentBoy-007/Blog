@@ -1,4 +1,4 @@
-import adminSchema from '../Components/model.js';
+import getAdminModel from '../Components/Models/AdminModel.js'
 import bcrypt from 'bcrypt'
 import tokens from "../Components/Tokens.js";
 
@@ -16,12 +16,14 @@ class Service {
 
             if (!password || typeof password !== 'string') {
                 const error = new Error(`Password, ${password} is either invalid or is not a string!`);
-                error.status = 401;
+                error.status = 401``;
                 throw error;
             }
 
+            const AdminModel = getAdminModel(global.blogAdminsDB);
+
             // check if the request user has a valid email or not
-            const isValidAccount = await adminSchema.findOne({ email }).select("+password");
+            const isValidAccount = await AdminModel.findOne({ email }).select("+password");
             if (!isValidAccount) {
                 const error = new Error(`Account with email, ${email} not found!`);
                 error.status = 404;
@@ -37,7 +39,7 @@ class Service {
             }
 
             // generate a token for the authenticated user, last 1h (automatically logs out after 1h)
-            const token = await tokens.generateToken({ userId: isValidAccount._id }); // token contains the userId of the admin
+            const token = await tokens.generateToken({ accountId: isValidAccount._id }); // token contains the accountId of the admin
 
             return res.status(200).json({ message: `Login successfull! Welcome to Cybrella, ${isValidAccount.email}!`, token });
         } catch (error) {
@@ -47,44 +49,51 @@ class Service {
         }
     }
 
-    // route for SignIn: http://localhost:8000/cybrella/account/signup
+    // route for SignUp: http://localhost:8000/cybrella/account/signup
     async SignUp(req, res) {
-        // add validator in the frontend (includes(@gmail.com))
         const { email } = req.body;
 
         try {
-            if (!email || typeof email !== 'string') {
-                const error = new Error("Email is either invalid or is not a string!");
-                error.status = 401;
-                throw error;
+            if (!email || typeof email !== "string") {
+                return res.status(400).json({ message: "Email is invalid or not a string!" });
             }
 
-            // check if the email was already used
-            const isEmailDuplicate = await adminSchema.findOne({ email });
+            const emailLowerCase = email.toLowerCase();
+
+            // Check for duplicate email with proper timeout handling
+            console.log("Checking email:", emailLowerCase);
+
+            const AdminModel = getAdminModel(global.blogAdminsDB);
+
+            const isEmailDuplicate = await AdminModel.findOne({ email: emailLowerCase });
             if (isEmailDuplicate) {
-                const error = new Error(`${email} already in used!`);
-                error.status = 409;
-                throw error;
+                return res.status(409).json({ message: `${emailLowerCase} is already in use!` });
             }
 
-            // making sure the PASSWORD is inside the .env
-            if (!process.env.PASSWORD) throw new Error("Environment variable PASSWORD is not defined!");
+            // Ensure password is set in .env
+            if (!process.env.PASSWORD) {
+                console.error("Error: Environment variable PASSWORD is not defined!");
+                return res.status(500).json({ message: "Server configuration error!" });
+            }
 
             const hashedPassword = await bcrypt.hash(process.env.PASSWORD, 10);
 
-            // creating a new account here
-            // create the account only if the email is unique
-            const newAccount = await adminSchema.create({ email, password: hashedPassword });
-            if (!newAccount) throw new Error("Cannot create an account!");
+            // Create new admin account
+            const newAccount = await AdminModel.create({ email: emailLowerCase, password: hashedPassword });
+            if (!newAccount) {
+                return res.status(500).json({ message: "Cannot create an account!" });
+            }
 
             const token = await tokens.generateToken({ userId: newAccount._id });
 
             return res.status(201).json({ message: "Account created successfully!", token });
+
         } catch (error) {
             console.error("Error in SignUp:", error);
 
+            // Return proper status codes
             return res.status(error.status || 500).json({
-                message: error.message || "An unexpected error occurred while trying to create an account!"
+                message: error.message || "An unexpected error occurred!"
             });
         }
     }
