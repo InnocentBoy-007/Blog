@@ -2,17 +2,15 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { createPassword_admin } from './Components/model.js';
-import service from './Service/SignIn.js';
+import account_route from './Routes/AccountRoutes.js'
 
 class ServerSetup {
     constructor() {
         dotenv.config();
 
-        this.PORT = 8000;
+        this.PORT = 7000;
         this.MONGODB_URL = process.env.MONGODB_URL;
         this.ORIGIN = process.env.ORIGIN;
-        this.PASSWORD = process.env.PASSWORD;
 
         if (!this.MONGODB_URL) {
             console.error("❌ MONGODB_URL is not defined in .env file!");
@@ -25,10 +23,11 @@ class ServerSetup {
     // Use custom mongodb server
     async connectDatabase() {
         try {
-            await mongoose.connect(this.MONGODB_URL)
-
-            // create the password for the admins
-            await createPassword_admin(this.PASSWORD);
+            await mongoose.connect(this.MONGODB_URL, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true
+            });
+            
             console.log("✅ Connected to MongoDB successfully!");
         } catch (error) {
             console.error("❌ Database connection failed!", error);
@@ -38,7 +37,6 @@ class ServerSetup {
 
     async connectServer() {
         try {
-            const route = express.Router();
             await this.connectDatabase();
 
             // CORS setup
@@ -56,13 +54,13 @@ class ServerSetup {
             };
 
             this.app.use(cors(corsOptions)); // Enable CORS middleware
-            this.app.use(express.json()); 
+            this.app.use(express.json());
 
-            this.app.use(route); // Mount the router
-            route.post('/signin', service.SignIn); // custom route for signing in
+            this.app.use('/cybrella/account', account_route);
+            // this.app.use('/cybrella/blog'); // use this api endpoint for blogging(add later)
 
-            this.app.use('/', (req, res) => { // default route to check if the server is working or not
-                res.send("Welcome to the server!");
+            this.app.use('/', (req, res) => { // default route to check if the server is working or not. Use: http://localhost:8000
+                res.send("Welcome to the cybrella blog server!");
             })
 
             this.app.listen(this.PORT, '0.0.0.0', () => {
