@@ -3,12 +3,12 @@ import dotenv from 'dotenv'
 
 dotenv.config();
 
-export const AuthMiddleware = async(req, res, next) => {
+export const AuthMiddleware = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     try {
-        if(!token) {
+        if (!token) {
             console.error("No token provided in Authorization header");
             const error = new Error("Access denied! No token provided!");
             error.status = 401;
@@ -36,7 +36,7 @@ export const AuthMiddleware = async(req, res, next) => {
             return decoded;
         });
 
-        if(!verifyTokenAndDecoding) {
+        if (!verifyTokenAndDecoding) {
             console.error("Token verification returned null");
             const error = new Error("Invalid token!");
             error.status = 401;
@@ -47,8 +47,8 @@ export const AuthMiddleware = async(req, res, next) => {
         next();
     } catch (error) {
         console.error("Authentication error:", error);
-        
-        if(error instanceof Error) {
+
+        if (error instanceof Error) {
             return res.status(error.status || 500).json({
                 message: error.message,
                 errorType: error.name || "AuthenticationError"
@@ -58,5 +58,5 @@ export const AuthMiddleware = async(req, res, next) => {
             message: "An unexpected error occurred while trying to authenticate the user!",
             errorType: "UnexpectedError"
         });
-    }   
+    }
 }
