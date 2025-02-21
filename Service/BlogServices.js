@@ -5,19 +5,6 @@ import getAdminModel from '../Components/Models/AdminModel.js';
 
 // Configure Multer
 const storage = multer.memoryStorage(); // Store files in memory as buffers
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // Limit file size to 5MB
-    },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only image files are allowed!'), false);
-        }
-    }
-});
 
 class BlogServices {
     // route for fetching all the blog posts: http://localhost:8000/cybrella/blog/fetch
