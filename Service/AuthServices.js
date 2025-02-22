@@ -7,6 +7,7 @@ class Service {
     async SignIn(req, res) {
         // add validator for email and password in the frontend
         const { email, password } = req.body?.signinCredentials ?? {};
+        
         try {
             if (!email || typeof email !== 'string') {
                 const error = new Error(`Email, ${email} is either invalid or is not a string!`);
@@ -33,6 +34,7 @@ class Service {
             // if email is valid, compare the password with the hasshed password
             const isValidPassword = await bcrypt.compare(password, isValidAccount?.password);
             if (!isValidPassword) {
+                console.log("Password comparison failed");
                 const error = new Error("Incorrect password!");
                 error.status = 401;
                 throw error;

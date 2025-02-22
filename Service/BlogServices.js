@@ -1,122 +1,104 @@
-import fs from 'fs'
-import path from 'path';
+import multer from 'multer';
 import mongoose from 'mongoose';
 import getBinaryFileModel from '../Components/Models/BlogModel.js'
 import getAdminModel from '../Components/Models/AdminModel.js';
 
+// Configure Multer
+const storage = multer.memoryStorage(); // Store files in memory as buffers
+
 class BlogServices {
-    // change the file format before sending back to the frontend
     // route for fetching all the blog posts: http://localhost:8000/cybrella/blog/fetch
     async GetPost(req, res) {
         const accountId = req.accountId;
         try {
-            const AdminModel = await getAdminModel(global.blogAdminsDB);
             if (!accountId) {
                 const error = new Error("Invalid accountId");
                 error.status = 500;
                 throw error;
             }
+    
+            const AdminModel = await getAdminModel(global.blogAdminsDB);
             const isValidAdmin = await AdminModel.findById(accountId);
             if (!isValidAdmin) {
-                const error = new Error("Acces denied! Unauthorized user!");
+                const error = new Error("Access denied! Unauthorized user!");
                 error.status = 401;
                 throw error;
             }
-
+    
             const FileModel = getBinaryFileModel(global.binaryFilesDB);
-
+    
             // 📌 Fetch all files from the database
             const files = await FileModel.find();
-
+    
             if (!files.length) {
                 return res.status(404).json({ message: "No files found in the database!" });
             }
-
-            // 📌 Convert files into a new format (Example: Base64)
-            const formattedFiles = files.map(file => {
-                const fileData = fs.readFileSync(file.filePath); // Read file from the filesystem
-                return {
-                    _id: file._id,
-                    filename: file.filename,
-                    base64: fileData.toString("base64"), // Convert file data to Base64
-                    fileCreatedAt: file.fileCreatedAt,
-                };
-            });
-
-            // Set content type for image responses
-            res.set('Content-Type', 'image/png');
-            return res.status(200).json({
-                files: formattedFiles,
-                contentType: 'image/png'
-            });
+    
+            // 📌 Fix: Send an array of files with contentType
+            const responseFiles = files.map(file => ({
+                id: file._id,
+                filename: file.filename,
+                contentType: file.image.contentType,
+                data: file.image.data.toString("base64") // Convert buffer to base64
+            }));
+    
+            return res.status(200).json({ files: responseFiles });
         } catch (error) {
-            if (error instanceof Error) {
-                return res.status(error.status).json({ message: error.message });
-            }
-            return res.status(500).json({ message: "An unexpected error occured while trying to fetch the post!" });
+            console.log(error);
+    
+            return res.status(error.status || 500).json({
+                message: error.message || "An unexpected error occurred while trying to fetch the post!"
+            });
         }
     }
+    
 
     // route for posting a blog: http://localhost:8000/cybrella/blog/upload
     async PostBlog(req, res) {
         const accountId = req.accountId;
-        const UPLOAD_DIR = "uploaded_files"; // Directory where files will be stored
-
-        // Ensure "uploaded_files" directory exists
-        if (!fs.existsSync(UPLOAD_DIR)) {
-            fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-        }
 
         try {
+            if (!accountId) {
+                const error = new Error("Invalid accountId");
+                error.status = 500;
+                throw error;
+            }
+
             const AdminModel = await getAdminModel(global.blogAdminsDB);
-            // authenticating the user by using the accountId;
-            const isValidAccountId = await AdminModel.findById(accountId);
-            if (!isValidAccountId) {
+
+            // Authenticate the user using accountId
+            const isValidAdmin = await AdminModel.findById(accountId);
+            if (!isValidAdmin) {
                 const error = new Error("User not found! Invalid userId!");
                 error.status = 404;
                 throw error;
             }
 
-            const FileModel = getBinaryFileModel(global.binaryFilesDB);
+            const FileModel = await getBinaryFileModel(global.binaryFilesDB);
 
-            /**
-             * 📌 Upload a file
-             * ✅ Uses streaming (req.pipe) to avoid memory issues
-            */
-            const { filename } = req.headers;
-            if (!filename) {
-                const error = new Error("Filename is required!");
-                error.status = 400;
-                throw error;
+            // Check if a file was uploaded
+            if (!req.file) {
+                return res.status(400).json({ message: "No file uploaded!" });
             }
 
-            const filePath = path.join(UPLOAD_DIR, filename);
-            const fileStream = fs.createWriteStream(filePath); // Create write stream
-
-            req.pipe(fileStream); // Stream request data directly into file
-
-            fileStream.on("finish", async () => {
-                try {
-                    // Save file path in the cybrella_binaryFiles database
-                    const newFile = new FileModel({ filename, filePath });
-                    await newFile.save();
-
-                    return res.status(201).json({ message: "File uploaded successfully!", path: filePath });
-                } catch (dbError) {
-                    console.error("❌ Database error:", dbError.message);
-                    return res.status(500).json({ error: "Failed to save file in database" });
-                }
+            // Create and save the file document in MongoDB
+            const newFile = new FileModel({
+                filename: req.file.originalname,
+                image: {
+                    data: req.file.buffer, // Store file as binary
+                    contentType: req.file.mimetype // Store file type
+                },
+                uploadedBy: isValidAdmin.email
             });
 
-            fileStream.on("error", (err) => {
-                console.error("❌ Stream error:", err.message);
-                return res.status(500).json({ error: "File upload failed" });
-            });
+            await newFile.save();
+
+            return res.status(201).json({ message: "File uploaded successfully!", fileId: newFile._id });
 
         } catch (error) {
             console.error("❌ Upload error:", error.message);
             if (error instanceof Error) {
-                return res.status(error.status || 500).json({ message: error.message || "An unexpected error occured while trying to upload files!" });
+                return res.status(error.status || 500).json({ message: error.message || "An unexpected error occurred while trying to upload files!" });
             }
         }
     }
@@ -125,10 +107,15 @@ class BlogServices {
     async DeleteBlog(req, res) {
         const accountId = req.accountId;
         try {
-            const AdminModel = await getAdminModel(global.blogAdminsDB);
-            const isValidAccountId = await AdminModel.findById(accountId);
+            if (!accountId) {
+                const error = new Error("Invalid accountId");
+                error.status = 500;
+                throw error;
+            }
 
-            if (!isValidAccountId) {
+            const AdminModel = await getAdminModel(global.blogAdminsDB);
+            const isValidAdmin = await AdminModel.findById(accountId);
+            if (!isValidAdmin) {
                 const error = new Error("User not found! Invalid userId!");
                 error.status = 404;
                 throw error;
@@ -136,36 +123,28 @@ class BlogServices {
 
             const FileModel = getBinaryFileModel(global.binaryFilesDB);
 
-            const {fileId} = req.params;
+            const { fileId } = req.params;
             if (!fileId || !mongoose.Types.ObjectId.isValid(fileId)) {
                 const error = new Error("Invalid blog ID!");
                 error.status = 400;
                 throw error;
             }
 
-            // Find the file in the database
-            const blog = await FileModel.findById(fileId);
-            if (!blog) {
-                const error = new Error("File not found!");
-                error.status = 404;
-                throw error;
-            }
-
-            // Remove the file from the filesystem
-            if (fs.existsSync(blog.filePath)) {
-                fs.unlinkSync(blog.filePath);
-            }
 
             // Remove the file record from the database
-            await FileModel.findByIdAndDelete(fileId);
-
+            const file = await FileModel.findByIdAndDelete(fileId);
+            if (!file) {
+                const error = new Error("File cannot be deleted!");
+                error.status = 404;
+                throw error
+            }
             return res.status(200).json({ message: "File deleted successfully!" });
 
         } catch (error) {
             console.log(error);
-            
+
             if (error instanceof Error) {
-                return res.status(error.status || 500).json({ message: error.message || "An unexpected error occured while trying to delete the post!" })
+                return res.status(error.status || 500).json({ message: error.message || "An unexpected error occurred while trying to delete the post!" })
             }
         }
     }

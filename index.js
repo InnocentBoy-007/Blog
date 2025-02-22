@@ -19,11 +19,11 @@ class ServerSetup {
     async connectDatabase() {
         try {
             console.log("⏳ Establishing database connections...");
-
+            
             // Attempt to connect to databases with retry logic
             const maxRetries = 3;
             let retryCount = 0;
-
+            
             while (retryCount < maxRetries) {
                 try {
                     global.blogAdminsDB = await connectDB.connectToDatabase("cybrella_admins");
@@ -36,7 +36,7 @@ class ServerSetup {
                     await new Promise(resolve => setTimeout(resolve, 5000));
                 }
             }
-
+            
             throw new Error(`Failed to connect to databases after ${maxRetries} attempts`);
         } catch (error) {
             console.error("❌ Database connection failed:", error.message);
@@ -52,31 +52,35 @@ class ServerSetup {
         try {
             // Establish database connection first
             await this.connectDatabase();
-
+            
             // Verify database connections are ready
             if (!global.binaryFilesDB) {
                 throw new Error("Binary files database connection not established");
             }
 
-            // CORS setup
+            // CORS setup with logging
             const corsOptions = {
-                origin: (origin, callback) => {
-                    if (origin === this.ORIGIN || !origin) {
-                        callback(null, true);
-                    } else {
-                        callback(new Error('Not allowed by CORS'));
-                    }
-                },
+                origin: this.ORIGIN,
                 credentials: true,
                 methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-                allowedHeaders: ['Content-Type', 'Authorization'],
+                allowedHeaders: ['Content-Type', 'Authorization', 'filename'],
             };
+
+            // Add CORS logging middleware
+            this.app.use((req, res, next) => {
+                console.log(`Incoming ${req.method} request from ${req.headers.origin} to ${req.path}`);
+                next();
+            });
 
             this.app.use(cors(corsOptions)); // Enable CORS middleware
             this.app.use(express.json());
+            this.app.use((req, res, next) => {
+                console.log('Request headers:', req.headers);
+                next();
+            });
 
             this.app.use('/cybrella/account', account_route);
-            this.app.use('/cybrella/blog', blog_route);
+            this.app.use('/cybrella/blog', blog_route); 
 
             this.app.use('/', (req, res) => { // default route to check if the server is working or not. Use: http://localhost:8000
                 res.send("Welcome to the cybrella blog server!");
