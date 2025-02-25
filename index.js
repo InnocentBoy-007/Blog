@@ -1,5 +1,5 @@
 import express from 'express';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import cors from 'cors';
 import connectDB from './Service/DBconnection.js';
 import account_route from './Routes/AccountRoutes.js'
@@ -7,8 +7,6 @@ import blog_route from './Routes/BlogRoutes.js'
 
 class ServerSetup {
     constructor() {
-        dotenv.config();
-
         this.PORT = 8000;
         this.ORIGIN = process.env.ORIGIN;
         // can also add validators for this environment vairables
